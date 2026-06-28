@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SREvolução — Sistema SRT</title>
+  <style>
+    :root{
+      --bg:#f4f8fb;
+      --card:#ffffff;
+      --primary:#2a9d8f;
+      --accent:#6fc3b0;
+      --muted:#6b7280;
+      --danger:#e63946;
+      --text:#0f1724;
+      --card-radius:12px;
+      --shadow: 0 6px 18px rgba(2,6,23,0.06);
+    }
+    [data-theme="dark"]{
+      --bg:#0b0f12;
+      --card:#0f1720;
+      --primary:#1b6b63;
+      --accent:#2a9d8f;
+      --muted:#9aa4b2;
+      --danger:#ff6b6b;
+      --text:#e6eef3;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+    header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:linear-gradient(90deg,var(--primary),var(--accent));color:#fff;position:sticky;top:0;z-index:20}
+    header h1{font-size:16px;margin:0}
+    header .actions{display:flex;gap:8px;align-items:center}
+    button.btn{background:transparent;border:1px solid rgba(255,255,255,0.18);color:#fff;padding:8px 10px;border-radius:8px;font-weight:600;cursor:pointer}
+    main{padding:14px;max-width:980px;margin:0 auto}
+    .progress-wrap{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+    .progress-bar{flex:1;background:rgba(0,0,0,0.06);height:14px;border-radius:10px;overflow:hidden}
+    .progress-fill{height:100%;background:var(--primary);width:0%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
+    .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:18px}
+    .card{background:var(--card);border-radius:var(--card-radius);padding:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden}
+    .card h3{margin:0;font-size:15px}
+    .card p{margin:0;font-size:12px;color:var(--muted)}
+    .card .meta{display:flex;justify-content:space-between;align-items:center}
+    .card .actions{display:flex;gap:8px;margin-top:8px}
+    .btn-primary{background:var(--primary);color:#fff;border:none;padding:8px 10px;border-radius:8px;font-weight:600;cursor:pointer}
+    .btn-ghost{background:transparent;border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:8px;cursor:pointer}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border-radius:999px;background:rgba(0,0,0,0.04);font-size:12px}
+    .small{font-size:12px;color:var(--muted)}
+    .modal{position:fixed;inset:0;background:rgba(2,6,23,0.45);display:none;align-items:flex-end;justify-content:center;padding:12px;z-index:50}
+    .sheet{background:var(--card);width:100%;max-width:760px;border-radius:12px 12px 0 0;padding:12px;max-height:92vh;overflow:auto}
+    .sheet header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .form-row{display:flex;gap:8px;margin-bottom:8px}
+    .col{flex:1}
+    label{display:block;font-size:13px;margin-bottom:6px;color:var(--muted)}
+    input[type="number"], input[type="text"], textarea, select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.08);background:transparent;color:var(--text)}
+    textarea{resize:vertical}
+    .accordion{border-radius:8px;border:1px solid rgba(0,0,0,0.06);overflow:hidden;margin-bottom:8px}
+    .accordion summary{list-style:none;padding:10px;background:rgba(255,255,255,0.6);cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+    .panel{padding:10px;background:transparent}
+    .mood-grid{display:flex;gap:8px;flex-wrap:wrap}
+    .mood{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);cursor:pointer;min-width:72px;text-align:center}
+    .mood.selected{outline:2px solid var(--primary);background:rgba(42,157,143,0.06)}
+    .alert{padding:8px;border-radius:8px;background:rgba(230,57,70,0.08);color:var(--danger);font-weight:700;margin-top:8px}
+    .input-alert{border-color:var(--danger) !important;box-shadow:0 0 0 4px rgba(230,57,70,0.06)}
+    .history-item{padding:8px;border-bottom:1px dashed rgba(0,0,0,0.04);white-space:pre-wrap;font-family:inherit}
+    footer{padding:12px;text-align:center;color:var(--muted);font-size:13px}
+    @media (max-width:520px){ .cards{grid-template-columns:repeat(1,1fr)} }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Anotações de enfermagem – SRT Leste</h1>
+    <div class="actions">
+      <div class="chip" id="todayCount">0 de 0 evoluídos</div>
+      <button class="btn" id="toggleTheme">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="progress-wrap">
+      <div class="progress-bar" aria-hidden>
+        <div id="progressFill" class="progress-fill">0%</div>
+      </div>
+      <div class="small" id="progressText">0/0</div>
+    </div>
+
+    <section class="cards" id="cardsContainer"></section>
+
+    <div id="modal" class="modal" role="dialog" aria-modal="true">
+      <div class="sheet" id="sheet">
+        <header>
+          <div>
+            <strong id="sheetName">Nome do Residente</strong>
+            <div class="small" id="sheetMeta">Nascimento • Diagnóstico</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn" id="closeSheet">Fechar</button>
+          </div>
+        </header>
+
+        <form id="evolForm">
+          <details class="accordion" open>
+            <summary>Sinais Vitais e Glicemia</summary>
+            <div class="panel">
+              <div class="form-row">
+                <div class="col"><label>PA Sistólica (mmHg)</label><input id="paS" type="number" min="30" max="300" step="1" /></div>
+                <div class="col"><label>PA Diastólica (mmHg)</label><input id="paD" type="number" min="20" max="200" step="1" /></div>
+              </div>
+              <div class="form-row">
+                <div class="col"><label>FC (bpm)</label><input id="fc" type="number" min="20" max="220" /></div>
+                <div class="col"><label>Temp (°C)</label><input id="temp" type="number" min="30" max="45" step="0.1" /></div>
+              </div>
+              <div class="form-row">
+                <div class="col"><label>SatO₂ (%)</label><input id="sat" type="number" min="50" max="100" /></div>
+                <div class="col"><label>Glicemia Capilar (mg/dL)</label><input id="glic" type="number" min="10" max="800" /></div>
+              </div>
+              <div id="vvAlerts" class="small"></div>
+            </div>
+          </details>
+
+          <details class="accordion">
+            <summary>Estado Psíquico e Social</summary>
+            <div class="panel">
+              <label>Escala de Humor</label>
+              <div class="mood-grid" id="moodGrid">
+                <div class="mood" data-value="Estável, calmo e cooperativo">🙂<div class="small">Estável</div></div>
+                <div class="mood" data-value="Isolado">😶<div class="small">Isolado</div></div>
+                <div class="mood" data-value="Eufórico">😄<div class="small">Eufórico</div></div>
+                <div class="mood" data-value="Disfórico">😟<div class="small">Disfórico</div></div>
+                <div class="mood" data-value="Agressivo">😠<div class="small">Agressivo</div></div>
+              </div>
+
+              <label style="margin-top:10px">Participação em Atividades</label>
+              <div>
+                <label><input type="checkbox" id="caps" /> Frequentou CAPS</label><br/>
+                <label><input type="checkbox" id="oficina" /> Participou de oficinas internas</label><br/>
+                <label><input type="checkbox" id="passeio" /> Participou de passeio</label><br/>
+                <label><input type="checkbox" id="autonomia" /> Realizou tarefa de autonomia</label>
+              </div>
+            </div>
+          </details>
+
+          <details class="accordion">
+            <summary>Medicação e Psicotrópicos</summary>
+            <div class="panel">
+              <div id="medList" class="small"></div>
+              <div style="margin-top:8px">
+                <label>Registro de administração</label>
+                <div id="medChecks"></div>
+              </div>
+              <div style="margin-top:8px">
+                <label>Observações sobre aceitação/recusa</label>
+                <textarea id="medObs" rows="3" placeholder="Descreva se houve recusa, vômito, necessidade de supervisão..."></textarea>
+              </div>
+            </div>
+          </details>
+
+          <details class="accordion">
+            <summary>Higiene e Autocuidado</summary>
+            <div class="panel">
+              <label>Nível de suporte no banho</label>
+              <select id="banho"><option>Autônomo</option><option>Supervisionado</option><option>Executado pelo técnico</option></select>
+              <label style="margin-top:8px">Troca de roupas</label>
+              <select id="roupa"><option>Autônomo</option><option>Supervisionado</option><option>Executado pelo técnico</option></select>
+              <label style="margin-top:8px">Higiene Bucal</label>
+              <select id="bucal"><option>Autônomo</option><option>Supervisionado</option><option>Executado pelo técnico</option></select>
+            </div>
+          </details>
+
+          <details class="accordion">
+            <summary>Agenda e Intercorrências Médicas</summary>
+            <div class="panel">
+              <label>Próximas consultas / exames</label>
+              <input id="agenda" type="text" placeholder="Ex: Psiquiatra CAPS 29/06 - jejum" />
+              <label style="margin-top:8px">Intercorrências / Condutas / Notas</label>
+              <textarea id="intercorr" rows="3" placeholder="Descreva intercorrências, condutas, evacuação, observações..."></textarea>
+            </div>
+          </details>
+
+          <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+            <button type="button" class="btn-primary" id="saveEvol">Salvar Evolução</button>
+            <button type="button" class="btn-ghost" id="saveAndSend">Salvar e Enviar (Supabase)</button>
+            <div style="flex:1"></div>
+            <div class="small">Última alteração: <span id="lastSaved">—</span></div>
+          </div>
+        </form>
+
+        <section style="margin-top:12px">
+          <h4>Histórico de Evoluções</h4>
+          <div id="historyList" class="small"></div>
+        </section>
+      </div>
+    </div>
+
+    <footer>Serviço residencial terapêutico Leste • TE Vitor Ribeiro Santos</footer>
+  </main>
+
+  <script>
+    /**************************************************************************
+     *  SUPABASE CONFIG
+     *  Cole suas credenciais abaixo:
+     *  - SUPABASE_URL
+     *  - SUPABASE_KEY
+     **************************************************************************/
+    const SUPABASE_URL = "https://kuhbvcrvmaubtnkemkjr.supabase.co"; // SUPABASE: COLE AQUI
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt1aGJ2Y3J2bWF1YnRua2Vta2pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MzY3NjEsImV4cCI6MjA5ODAxMjc2MX0.xm8vRFgB9yzYmRZPvBatkdlZPyEy97MP00ppzmlFwoM"; // SUPABASE: COLE AQUI
+
+    const pacientes = [
+      {id:1,nome:"Ana Paula Ferreira",nascimento:"12/03/1985",diagnostico:"Transtorno Depressivo Maior",
+        medicamentos:{Manha:["Losartana 50 mg (1 comp.)","Metformina 850 mg (1 comp.)"],Tarde:["Sinvastatina 20 mg (1 comp.)","Omeprazol 20 mg (1 comp.)"],Noite:["Amitriptilina 25 mg (1 comp.)","Levotiroxina 50 mcg (1 comp.)"]}},
+      {id:2,nome:"João Carlos Mendes",nascimento:"25/07/1990",diagnostico:"Transtorno de Ansiedade Generalizada",
+        medicamentos:{Manha:["Enalapril 10 mg (1 comp.)","Hidroclorotiazida 25 mg (1 comp.)"],Tarde:["Metformina 850 mg (1 comp.)","Ácido acetilsalicílico 100 mg (1 comp.)"],Noite:["Rosuvastatina 10 mg (1 comp.)","Sertralina 50 mg (1 comp.)"]}},
+      {id:3,nome:"Maria Eduarda Santos",nascimento:"09/11/1978",diagnostico:"Transtorno Obsessivo‑Compulsivo",
+        medicamentos:{Manha:["Atenolol 50 mg (1 comp.)","Levotiroxina 75 mcg (1 comp.)"],Tarde:["Omeprazol 20 mg (1 comp.)","Clopidogrel 75 mg (1 comp.)"],Noite:["Fluoxetina 20 mg (1 comp.)","Sinvastatina 20 mg (1 comp.)"]}},
+      {id:4,nome:"Ricardo Almeida",nascimento:"03/05/1969",diagnostico:"Transtorno de Pânico",
+        medicamentos:{Manha:["Losartana 50 mg (1 comp.)","Metformina 850 mg (1 comp.)"],Tarde:["Ácido fólico 5 mg (1 comp.)","Pantoprazol 40 mg (1 comp.)"],Noite:["Escitalopram 10 mg (1 comp.)","Atorvastatina 20 mg (1 comp.)"]}},
+      {id:5,nome:"Fernanda Oliveira",nascimento:"18/02/2000",diagnostico:"Transtorno Bipolar Tipo II",
+        medicamentos:{Manha:["Levotiroxina 50 mcg (1 comp.)","Sertralina 50 mg (1 comp.)"],Tarde:["Omeprazol 20 mg (1 comp.)","Ácido acetilsalicílico 100 mg (1 comp.)"],Noite:["Sinvastatina 20 mg (1 comp.)","Quetiapina 100 mg (1 comp.)"]}},
+      {id:6,nome:"Marcos Vinícius Pereira",nascimento:"30/08/1982",diagnostico:"Transtorno de Insônia Crônica",
+        medicamentos:{Manha:["Enalapril 10 mg (1 comp.)","Metformina 850 mg (1 comp.)"],Tarde:["Pantoprazol 40 mg (1 comp.)","Clopidogrel 75 mg (1 comp.)"],Noite:["Rosuvastatina 10 mg (1 comp.)","Mirtazapina 30 mg (1 comp.)"]}},
+      {id:7,nome:"Camila Rocha",nascimento:"14/01/1995",diagnostico:"Transtorno de Ansiedade Social",
+        medicamentos:{Manha:["Losartana 50 mg (1 comp.)","Levotiroxina 75 mcg (1 comp.)"],Tarde:["Omeprazol 20 mg (1 comp.)","Ácido acetilsalicílico 100 mg (1 comp.)"],Noite:["Escitalopram 10 mg (1 comp.)","Atorvastatina 20 mg (1 comp.)"]}}
+    ];
+
+    let currentPatient = null;
+    let evolucoes = JSON.parse(localStorage.getItem('evolucoes_srt') || '[]');
+
+    const cardsContainer = document.getElementById('cardsContainer');
+
+    // Render cards com marcação ✅ quando já existe anotação no dia
+    function renderCards(){
+      cardsContainer.innerHTML = '';
+      const today = new Date().toISOString().slice(0,10);
+      pacientes.forEach(p=>{
+        const evolucaoHoje = evolucoes.some(e=> e.patientId===p.id && e.timestamp.slice(0,10)===today);
+        const el = document.createElement('article');
+        el.className = 'card';
+        el.dataset.id = p.id;
+        el.innerHTML = `
+          <div class="meta">
+            <div>
+              <h3>${p.nome} ${evolucaoHoje ? "✅" : ""}</h3>
+              <p>${p.nascimento} • ${p.diagnostico}</p>
+            </div>
+            <div class="small">ID ${p.id}</div>
+          </div>
+          <div class="actions">
+            <button class="btn-primary" data-action="open">Abrir Evolução</button>
+            <button class="btn-ghost" data-action="history">Histórico</button>
+          </div>
+        `;
+        el.querySelector('[data-action="open"]').addEventListener('click',()=>openSheet(p.id));
+        el.querySelector('[data-action="history"]').addEventListener('click',()=>openHistory(p.id));
+        cardsContainer.appendChild(el);
+      });
+      updateProgress();
+    }
+
+    // Modal controls
+    const modal = document.getElementById('modal');
+    const sheetName = document.getElementById('sheetName');
+    const sheetMeta = document.getElementById('sheetMeta');
+    document.getElementById('closeSheet').addEventListener('click',()=> modal.style.display='none');
+
+    function openSheet(id, opts={}){
+      currentPatient = pacientes.find(x=>x.id===id);
+      sheetName.textContent = currentPatient.nome;
+      sheetMeta.textContent = `${currentPatient.nascimento} • ${currentPatient.diagnostico}`;
+
+      // preencher medList e checks
+      const medList = document.getElementById('medList');
+      medList.innerHTML = '';
+      const meds = currentPatient.medicamentos;
+      for(const turno of ['Manha','Tarde','Noite']){
+        if(meds[turno] && meds[turno].length){
+          medList.innerHTML += `<div class="small"><strong>${turno}:</strong> ${meds[turno].join('; ')}</div>`;
+        }
+      }
+      const medChecks = document.getElementById('medChecks');
+      medChecks.innerHTML = '';
+      const allMeds = [].concat(meds.Manha||[], meds.Tarde||[], meds.Noite||[]);
+      allMeds.forEach((m,idx)=>{
+        const idc = `med_${idx}`;
+        medChecks.innerHTML += `<label><input type="checkbox" id="${idc}" data-med="${m}" /> ${m} - Administrado</label><br/>`;
+      });
+
+      // reset form
+      document.getElementById('evolForm').reset();
+      document.getElementById('vvAlerts').innerHTML = '';
+      document.getElementById('lastSaved').textContent = '—';
+      renderHistoryList(id);
+      modal.style.display = 'flex';
+      if(opts.emergency) setTimeout(()=>document.getElementById('paS').focus(),200);
+    }
+
+    function openHistory(id){
+      openSheet(id);
+      setTimeout(()=>document.getElementById('historyList').scrollIntoView({behavior:'smooth'}),300);
+    }
+
+    // Mood selection
+    document.getElementById('moodGrid').addEventListener('click', e=>{
+      const moodEl = e.target.closest('.mood');
+      if(!moodEl) return;
+      document.querySelectorAll('.mood').forEach(m=>m.classList.remove('selected'));
+      moodEl.classList.add('selected');
+    });
+
+    // Vitals alerts
+    function checkVitalsAlerts(){
+      const paS = Number(document.getElementById('paS').value || 0);
+      const paD = Number(document.getElementById('paD').value || 0);
+      const glic = Number(document.getElementById('glic').value || 0);
+      const fc = Number(document.getElementById('fc').value || 0);
+      const sat = Number(document.getElementById('sat').value || 0);
+      const temp = Number(document.getElementById('temp').value || 0);
+      const alerts = [];
+
+      if(paS && (paS < 90 || paS > 180)){ alerts.push(`PA sistólica ${paS} mmHg fora do esperado`); document.getElementById('paS').classList.add('input-alert'); } else document.getElementById('paS').classList.remove('input-alert');
+      if(paD && (paD < 60 || paD > 110)){ alerts.push(`PA diastólica ${paD} mmHg fora do esperado`); document.getElementById('paD').classList.add('input-alert'); } else document.getElementById('paD').classList.remove('input-alert');
+      if(glic && glic < 70){ alerts.push(`Glicemia ${glic} mg/dL — risco de hipoglicemia`); document.getElementById('glic').classList.add('input-alert'); } else if(glic && glic > 180){ alerts.push(`Glicemia ${glic} mg/dL — hiperglicemia`); document.getElementById('glic').classList.add('input-alert'); } else document.getElementById('glic').classList.remove('input-alert');
+      if(fc && (fc < 50 || fc > 120)){ alerts.push(`Frequência cardíaca ${fc} bpm fora do esperado`); document.getElementById('fc').classList.add('input-alert'); } else document.getElementById('fc').classList.remove('input-alert');
+      if(sat && sat < 92){ alerts.push(`Saturação ${sat}% baixa`); document.getElementById('sat').classList.add('input-alert'); } else document.getElementById('sat').classList.remove('input-alert');
+      if(temp && (temp < 35.5 || temp > 38.0)){ alerts.push(`Temperatura ${temp}°C fora do esperado`); document.getElementById('temp').classList.add('input-alert'); } else document.getElementById('temp').classList.remove('input-alert');
+
+      const vvAlerts = document.getElementById('vvAlerts');
+      if(alerts.length){ vvAlerts.innerHTML = '<div class="alert">' + alerts.join(' • ') + '</div>'; } else vvAlerts.innerHTML = '';
+      return alerts;
+    }
+
+    ['paS','paD','glic','fc','sat','temp'].forEach(id=>{ document.getElementById(id).addEventListener('input', checkVitalsAlerts); });
+
+    // Save local
+    document.getElementById('saveEvol').addEventListener('click', ()=>{
+      const data = collectFormData();
+      data.patientId = currentPatient.id;
+      data.timestamp = new Date().toISOString();
+      evolucoes.push(data);
+      localStorage.setItem('evolucoes_srt', JSON.stringify(evolucoes));
+      document.getElementById('lastSaved').textContent = new Date().toLocaleString();
+      renderHistoryList(currentPatient.id);
+      renderCards();
+      updateProgress();
+      alert('Evolução salva localmente.');
+    });
+
+    // Save and send to Supabase (exemplo)
+    document.getElementById('saveAndSend').addEventListener('click', async ()=>{
+      const data = collectFormData();
+      data.patientId = currentPatient.id;
+      data.timestamp = new Date().toISOString();
+      evolucoes.push(data);
+      localStorage.setItem('evolucoes_srt', JSON.stringify(evolucoes));
+      document.getElementById('lastSaved').textContent = new Date().toLocaleString();
+      renderHistoryList(currentPatient.id);
+      renderCards();
+      updateProgress();
+
+      if(!SUPABASE_URL || !SUPABASE_KEY){
+        alert('Credenciais Supabase não configuradas. Cole SUPABASE_URL e SUPABASE_KEY no código.');
+        return;
+      }
+      try{
+        const resp = await fetch(`${SUPABASE_URL}/rest/v1/evolucoes`, {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json',
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+          },
+          body: JSON.stringify(data)
+        });
+        if(resp.ok){
+          alert('Evolução enviada ao Supabase com sucesso.');
+        } else {
+          const txt = await resp.text();
+          console.error('Supabase error', resp.status, txt);
+          alert('Erro ao enviar ao Supabase. Ver console para detalhes.');
+        }
+      }catch(err){
+        console.error(err);
+        alert('Falha na comunicação com Supabase.');
+      }
+    });
+
+    // Form data collector
+    function collectFormData(){
+      const meds = [];
+      document.querySelectorAll('#medChecks input[type="checkbox"]').forEach(ch=>{
+        meds.push({med:ch.dataset.med, administrado:ch.checked});
+      });
+      const moodEl = document.querySelector('.mood.selected');
+      const mood = moodEl ? moodEl.dataset.value : null;
+      return {
+        sinaisVitais:{
+          paS: Number(document.getElementById('paS').value || 0),
+          paD: Number(document.getElementById('paD').value || 0),
+          fc: Number(document.getElementById('fc').value || 0),
+          temp: Number(document.getElementById('temp').value || 0),
+          sat: Number(document.getElementById('sat').value || 0),
+          glic: Number(document.getElementById('glic').value || 0),
+          alerts: checkVitalsAlerts()
+        },
+        estadoPsiquico:{
+          humor: mood,
+          caps: document.getElementById('caps').checked,
+          oficina: document.getElementById('oficina').checked,
+          passeio: document.getElementById('passeio').checked,
+          autonomia: document.getElementById('autonomia').checked
+        },
+        medicacao:{
+          registros: meds,
+          obs: document.getElementById('medObs').value
+        },
+        higiene:{
+          banho: document.getElementById('banho').value,
+          roupa: document.getElementById('roupa').value,
+          bucal: document.getElementById('bucal').value
+        },
+        agenda:{
+          proximas: document.getElementById('agenda').value,
+          intercorr: document.getElementById('intercorr').value
+        },
+        tecnico:{ nome: 'Técnico SRT' }
+      };
+    }
+
+    // Formata anotação no texto solicitado
+    function formatAnnotation(data){
+      const dt = new Date(data.timestamp);
+      const horario = dt.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric', hour:'2-digit', minute:'2-digit'});
+      // Atividades texto
+      const atividades = [];
+      if(data.estadoPsiquico.caps) atividades.push('frequentou o CAPS');
+      if(data.estadoPsiquico.oficina) atividades.push('fez oficinas na casa');
+      if(data.estadoPsiquico.passeio) atividades.push('participou de passeio');
+      if(data.estadoPsiquico.autonomia) atividades.push('fez tarefas domésticas');
+      const atividadesTxt = atividades.length ? atividades.join(', ') + '.' : '—';
+      const autocuidadoTxt = `realizou higiene ${data.higiene.banho.toLowerCase()} e incentivo da equipe.`;
+      const sv = data.sinaisVitais;
+      const svTxt = `PA: ${sv.paS}x${sv.paD} mmHg, FC: ${sv.fc} bpm, T: ${sv.temp} °C, SatO₂: ${sv.sat}%, HGT: ${sv.glic} mg/dL.`;
+      const agendaTxt = data.agenda.proximas || '—';
+      const notasTxt = data.agenda.intercorr || '—';
+
+      // Monta exatamente no formato pedido
+      return `${dt.toLocaleDateString('pt-BR')} às ${dt.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}
+Morador: ${currentPatient.nome} | Humor: ${data.estadoPsiquico.humor || '—'}.
+Atividades: ${atividadesTxt}
+Autocuidado: ${autocuidadoTxt}
+SSVV: ${svTxt}
+Agenda: ${agendaTxt}
+Notas: ${notasTxt}`;
+    }
+
+    // Render histórico com texto formatado
+    function renderHistoryList(patientId){
+      const list = document.getElementById('historyList');
+      const items = evolucoes.filter(e=>e.patientId===patientId).sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+      if(!items.length){ list.innerHTML = '<div class="small">Nenhuma evolução registrada.</div>'; return; }
+      list.innerHTML = items.map(it=> `<div class="history-item">${formatAnnotation(it)}</div>`).join('');
+    }
+
+    // Update progress and today count
+    function updateProgress(){
+      const today = new Date().toISOString().slice(0,10);
+      const total = pacientes.length;
+      const preenchidos = pacientes.filter(p=>{
+        return evolucoes.some(e=> e.patientId===p.id && e.timestamp.slice(0,10)===today );
+      }).length;
+      const percent = Math.round((preenchidos/total)*100);
+      document.getElementById('progressFill').style.width = percent + '%';
+      document.getElementById('progressFill').textContent = `${preenchidos} de ${total}`;
+      document.getElementById('progressText').textContent = `${preenchidos}/${total}`;
+      document.getElementById('todayCount').textContent = `${preenchidos} de ${total} evoluídos`;
+    }
+
+    // Theme toggle
+    document.getElementById('toggleTheme').addEventListener('click', ()=>{
+      const root = document.documentElement;
+      if(root.getAttribute('data-theme') === 'dark'){
+        root.removeAttribute('data-theme');
+        document.getElementById('toggleTheme').textContent = '🌙';
+      } else {
+        root.setAttribute('data-theme','dark');
+        document.getElementById('toggleTheme').textContent = '☀️';
+      }
+    });
+
+    // Inicialização
+    renderCards();
+    updateProgress();
+
+    // Expor para debug
+    window._SRT = {pacientes,evolucoes,renderCards,updateProgress};
+  </script>
+</body>
+</html>
